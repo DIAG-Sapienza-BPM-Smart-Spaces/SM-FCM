@@ -42,6 +42,17 @@ Implementation of a FCM-based Maturity Model for Smart Manufacturing focusing on
     pip install -r requirements.py
     ```
 
+## Run the tool
+```
+cd my-tool
+npm install # install dependencies
+npm start
+```
+```
+cd my-tool/backend
+python server.py
+```
+
 ## Run the code
 
 - Activate the conda environment:
