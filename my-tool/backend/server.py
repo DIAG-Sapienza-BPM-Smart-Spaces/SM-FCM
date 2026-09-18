@@ -1,96 +1,97 @@
+from copy import deepcopy
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 from FCM_class_tool import FCM
+from GA_class_tool import ALGA_class
 import FLT_class
-import json
-import copy
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:3000'])  
+CORS(app, origins=['http://localhost:3000'])
+app.config.update(GA_RUNS=2, GA_POP_SIZE=50, GA_GENERATIONS=250, GA_RETAIN=15)
+
+
+def read_model_request():
+    data = request.get_json()
+    if not isinstance(data, dict):
+        raise ValueError("Request body must be a JSON object")
+    structure = data.get('structure')
+    activation_level = data.get('activation_level')
+    if not isinstance(structure, dict) or not isinstance(structure.get('nodes'), list) or not isinstance(structure.get('transitions'), list):
+        raise ValueError("structure must contain nodes and transitions arrays")
+    if not isinstance(activation_level, list):
+        raise ValueError("activation_level must be an array")
+    ids = [node['id'] for node in structure['nodes']]
+    if len(set(ids)) != len(ids):
+        raise ValueError("Node IDs must be unique")
+    if sum(node['role'] == 'root' for node in structure['nodes']) != 1:
+        raise ValueError("Exactly one root node is required")
+    levels = {node['id']: node for node in activation_level}
+    if len(levels) != len(activation_level) or not set(ids).issubset(levels):
+        raise ValueError("Provide one activation level for every node")
+    for node in structure['nodes']:
+        if node['role'] not in ('root', 'intermediate', 'final'):
+            raise ValueError("Unknown node role")
+        if node['role'] == 'intermediate' and not isinstance(levels[node['id']].get('enabled'), bool):
+            raise ValueError("Intermediate nodes require a boolean enabled flag")
+    for edge in structure['transitions']:
+        if edge['from'] not in levels or edge['to'] not in levels or edge['from'] not in ids or edge['to'] not in ids:
+            raise ValueError("Transitions must reference existing nodes")
+    return data, structure, activation_level
+
+
+def graph_result(structure, fcm):
+    graph = deepcopy(structure)
+    values = {node['id']: node for node in fcm.generate_al_values()}
+    for node in graph['nodes']:
+        if node['id'] in values:
+            result = values[node['id']]
+            node.update(weight=result['weight'], numeric_weight=result['numeric_weight'])
+    return graph
+
 
 @app.route('/inference', methods=['POST'])
 def execute_python():
     try:
-        data = request.get_json()
-        structure = data.get('structure')
-        activation_level = data.get('activation_level')
+        _, structure, activation_level = read_model_request()
+        fcm = FCM(100, structure, activation_level, FLT_class.define_al_fuzzy())
+        fcm.run_fcm()
+        return jsonify(message='Script executed successfully', graphData=graph_result(structure, fcm))
+    except (ValueError, KeyError, TypeError, StopIteration, BadRequest, UnsupportedMediaType) as error:
+        return jsonify(error=str(error)), 400
+    except Exception:
+        app.logger.exception("Inference failed")
+        return jsonify(error="Inference failed"), 500
 
-        flt = FLT_class.define_al_fuzzy()
-        iterations = 100 
-        threshold = 0.001
-
-        fcm_obj = FCM(iterations, structure, activation_level, flt)
-        print("FCM object created")
-        fcm_obj.run_fcm(threshold)
-        json_output = fcm_obj.generate_al_values()
-        #print("output FCM:", json_output)
-                
-        single_data = structure
-        final_data = {node['id']: node for node in json_output}
-
-        for node in single_data['nodes']:
-            if node['id'] in final_data:
-                node.update({
-                'weight': final_data[node['id']]['weight'],
-                'numeric_weight': final_data[node['id']]['numeric_weight']
-                })
-
-        return jsonify({'message': 'Script executed successfully', 'graphData': single_data}), 200
-    except Exception as e:
-        print("Errore durante l'esecuzione:", str(e))
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/simulation', methods=['POST'])
 def execute_simulation():
     try:
-        data = request.get_json()
-        structure = data.get('structure')
-        activation_level = data.get('activation_level')
+        data, structure, activation_level = read_model_request()
+        target = data.get('global_weight')
+        if target is None or target == 'NA':
+            raise ValueError("Select a target maturity level")
+        ga = ALGA_class(
+            app.config['GA_RUNS'], app.config['GA_POP_SIZE'],
+            app.config['GA_GENERATIONS'], app.config['GA_RETAIN'],
+            target, structure, activation_level, FLT_class.define_al_fuzzy())
+        _, populations, _ = ga.what_if()
+        best = [population.individuals[0] for population in populations]
+        return jsonify(
+            message=f'Simulation completed: target reached in {sum(individual.fitness_val < 0.03 for individual in best)}/{len(best)} solutions',
+            graphData=[graph_result(structure, individual.algorithm.fcm) for individual in best],
+            solutions=[dict(activation_level=individual.activation_level,
+                            maturity=individual.algorithm.result,
+                            target=ga.target_val,
+                            target_reached=individual.fitness_val < 0.03)
+                       for individual in best])
+    except (ValueError, KeyError, TypeError, StopIteration, BadRequest, UnsupportedMediaType) as error:
+        return jsonify(error=str(error)), 400
+    except Exception:
+        app.logger.exception("Simulation failed")
+        return jsonify(error="Simulation failed"), 500
 
-        #flt = FLT_class.define_al_fuzzy()
-        #iterations = 100 
-        #threshold = 0.001
-        
-        open_file = open('final_al1.json', 'r')
-        json_output1 = open_file.read()
-        json_output1 = json.loads(json_output1)
-        open_file.close()
-        #print("output 1 FCM:", json_output1)
 
-        open_file = open('final_al2.json', 'r')
-        json_output2 = open_file.read()
-        json_output2 = json.loads(json_output2)
-        open_file.close()
-        #print("output 2 FCM:", json_output2)
-
-        single_data1 = copy.deepcopy(structure)
-        final_data1 = {node['id']: node for node in json_output1}
-        single_data2 = copy.deepcopy(structure)
-        final_data2 = {node['id']: node for node in json_output2}
-
-        for node in single_data1['nodes']:
-            if node['id'] in final_data1:
-                node.update({
-                'weight': final_data1[node['id']]['weight'],
-                'numeric_weight': final_data1[node['id']]['numeric_weight']
-                })
-
-        for node in single_data2['nodes']:
-            if node['id'] in final_data2:
-                node.update({
-                'weight': final_data2[node['id']]['weight'],
-                'numeric_weight': final_data2[node['id']]['numeric_weight']
-                })
-
-        for single_data in [single_data1, single_data2]:
-            if 'transitions' not in single_data:
-                single_data['transitions'] = []
-
-        return jsonify({'message': 'Script executed successfully', 'graphData': [single_data1, single_data2]}), 200
-        
-    except Exception as e:
-        print("Errore durante l'esecuzione:", str(e))
-        return jsonify({'error': str(e)}), 500
-        
 if __name__ == '__main__':
     app.run(debug=True)

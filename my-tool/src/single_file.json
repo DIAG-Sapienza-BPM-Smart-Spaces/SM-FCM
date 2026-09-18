@@ -272,8 +272,9 @@
                 "meanings": ["DM", "BI"],
                 "targets": [5, 35, 36, 37, 38, 41]
             }
-        ],
-    "transitions": [
+    ],
+    "transitions": 
+        [
         {
             "from": 1,
             "to": 0,
@@ -1522,5 +1523,6 @@
             "to": 41,
             "weight": 0.4375
         }
-    ]
+    ],
+    "weights": "Very Low: The technology is currently not used in the system. \nLow: Design and planning phase for the implementation of the technology, but it has not yet been implemented. \nMedium: Initial phase of technology implementation (e.g., pilot project) and first test conducted. \nHigh: The technology has been implemented and integrated into the system, but is still in development and used only by a limited number of users. \nVery High: The technology has been fully implemented and integrated into the system (in at least one process), and activities of monitoring and continuous improvement are underway."
 }

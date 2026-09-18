@@ -5,29 +5,118 @@ Implementation of a FCM-based Maturity Model for Smart Manufacturing focusing on
 ![map](images/map.png)
 
 ## Structure of the repository
-```
+
+```text
 .
-├── evaluation                      # sources for the evaluation
-|   ├── eval_structure.py           # evaluation of the structure
-|   ├── eval_fcm.py                 # evaluation of the FCM inference
-|   ├── notebook_eval_fcm.ipynb     # evaluation results of the FCM inference
-|   └── ...
-├── model                           # sources of the FCM model
-|   └── ...
-├── cases                           # sources of the cases to be evaluated
-|   └──...
-├── utils
-|   ├── data                        # raw data to construct the model
-|   |   └──...
-|   └── single_FCM.py               # script to find the lambda of each FCM
-├── config.json                     # configuration file
-├── FCM_class.py                    # FCM class implementing inference
-├── FLT_class.py                    # FLT class implementing the membership functions
-└── ...
+|-- my-tool/
+|   |-- src/                       # React interface and graph definition
+|   |-- backend/
+|   |   |-- server.py              # Flask inference and simulation API
+|   |   |-- FCM_class_tool.py      # FCM inference for the web tool
+|   |   |-- GA_class_tool.py       # Genetic algorithm for the web tool
+|   |   |-- FLT_class.py           # Fuzzy linguistic terms
+|   |   |-- requirements.txt       # Backend dependencies
+|   |   |-- test_integration.py    # FCM, GA and API regression tests
+|   |   `-- README.md              # Backend details
+|   `-- package.json              # React scripts and dependencies
+|-- evaluation/                   # Research experiments and results
+|-- model/                        # Research model definitions
+|-- cases/                        # Company activation-level datasets
+|-- utils/                        # Model utilities and expert responses
+|-- config.json                   # Configuration for research scripts
+|-- FCM_class.py                   # Original research inference
+|-- GA_class.py                    # Original research genetic algorithm
+|-- FLT_class.py                   # Research fuzzy linguistic terms
+|-- FCM_class_tool.py              # Root copy of the web-tool FCM
+|-- GA_class_tool.py               # Root copy of the web-tool GA
+|-- requirements.txt              # Original research dependencies
+`-- package.json                  # Shared visualization dependencies
 ```
 
+## Run the web application
 
-## Getting Started
+The application uses React at `http://localhost:3000` and Flask at
+`http://localhost:5000`. Commands below start from the repository root.
+You need Python, Node.js/npm, and optionally Conda for environment management.
+
+### Start the backend
+
+```shell
+conda create -n pyfcm-tool python=3.12
+conda activate pyfcm-tool
+python -m pip install -r my-tool/backend/requirements.txt
+python my-tool/backend/server.py
+```
+
+The backend requirements include Flask, Flask-Cors, and scikit-fuzzy 0.5.0.
+Use this requirements file for the web application; the root requirements
+retain the original research dependencies, including scikit-fuzzy 0.4.2,
+which cannot be imported with Python 3.12.
+
+### Start the frontend
+
+In a second terminal, from the repository root:
+
+```shell
+npm install
+cd my-tool
+npm install
+npm start
+```
+
+Both installation steps are needed because D3 is declared in the root
+`package.json`, while React and its scripts are declared in `my-tool/package.json`.
+Open `http://localhost:3000`. The frontend calls port 5000, and the backend
+allows this frontend origin through CORS.
+
+### Inference and simulation
+
+1. Enable at least one IT-system section and assign activation levels to its technologies.
+2. Select **Run Inference** to calculate the current maturity level.
+3. Select a target maturity level and run the simulation to search for technology improvements.
+
+Inference accepts linguistic weights (`NA`, `VL`, `L`, `M`, `H`, `VH`) or numeric
+weights between 0 and 1 through the API. The interface requires technology
+weights other than `NA` in enabled sections.
+
+Simulation executes the genetic algorithm using the supplied activation levels
+and target. It returns two candidate graphs rather than loading the example
+`final_al1.json` and `final_al2.json` files. The GA proposes increases in technology
+activation levels; a target is not guaranteed to be reached. The response message
+reports how many candidates reach the target tolerance.
+
+| Endpoint | Request fields | Response fields |
+| --- | --- | --- |
+| `POST /inference` | `structure`, `activation_level` | `message`, `graphData` (one graph) |
+| `POST /simulation` | `structure`, `activation_level`, `global_weight` | `message`, `graphData` (array), `solutions` |
+
+Each simulation solution includes the proposed input `activation_level`, resulting
+`maturity`, `target`, and `target_reached`. Submit these activation levels to
+`/inference` with the same structure to reproduce the result. Target attainment
+uses a fitness below 0.03 after rounding the absolute error to three decimal places.
+Invalid requests return HTTP 400.
+
+Default GA settings are 2 runs, 50 individuals, 250 generations, and 15% elitism.
+These are Flask configuration values in `my-tool/backend/server.py`. See the
+[backend README](my-tool/backend/README.md) for configuration details.
+
+### Run backend tests
+
+With the backend environment active, from the repository root:
+
+```shell
+python -m unittest discover -s my-tool/backend -p test_integration.py -v
+```
+
+Tests cover iteration limits, complete converged updates, input immutability,
+numeric and linguistic weights, reproducible GA results, and API responses.
+
+The root and backend copies of `FCM_class_tool.py` and `GA_class_tool.py` currently
+share the same implementation and must be kept aligned. The Flask server imports
+the backend copies. The original `FCM_class.py` and `GA_class.py` remain the entry
+points for the research workflows below.
+
+## Set up the research scripts
 
 - Install [Miniconda](https://docs.anaconda.com/free/miniconda/) or [Anaconda](https://www.anaconda.com/download) if you haven't already.
 
@@ -39,10 +128,10 @@ Implementation of a FCM-based Maturity Model for Smart Manufacturing focusing on
 
 - Install the dependencies:
     ```shell
-    pip install -r requirements.py
+    python -m pip install -r requirements.txt
     ```
 
-## Run the code
+## Run the research code
 
 - Activate the conda environment:
     ```shell
@@ -111,6 +200,8 @@ python eval_ga.py
 
 
 ## Case Study Results
+
+The following are the original research results, not a regression baseline for the web tool.
 
 Final activation level of each IT system:
 ```
