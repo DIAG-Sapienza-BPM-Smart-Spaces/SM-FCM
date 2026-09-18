@@ -11,31 +11,36 @@
                 "id": 1,
                 "role": "intermediate",
                 "meanings": ["CAD", "CAM", "PLM"],
-                "targets": [0]
+                "targets": [0],
+                "lambda":0.83
             },
             {
                 "id": 2,
                 "role": "intermediate",
                 "meanings": ["CRM"],
-                "targets": [0]
+                "targets": [0],
+                "lambda":0.85
             },
             {
                 "id": 3,
                 "role": "intermediate",
                 "meanings": ["ERP", "SCM"],
-                "targets": [0]
+                "targets": [0],
+                "lambda":0.81
             },
             {
                 "id": 4,
                 "role": "intermediate",
                 "meanings": ["WMS", "TMS"],
-                "targets": [0]
+                "targets": [0],
+                "lambda":0.91
             },
             {
                 "id": 5,
                 "role": "intermediate",
                 "meanings": ["MES"],
-                "targets": [0]
+                "targets": [0],
+                "lambda":0.75
             },
 
             {
@@ -235,7 +240,7 @@
                 "id": 37,
                 "role": "final",
                 "meanings": ["AI", "CV", "PM", "RPA"],
-                "targets": [5, 35, 36, 37, 39, 40, 41, 42]
+                "targets": [5, 35, 36, 38, 39, 40, 41, 42]
             },
             {
                 "id": 38,
@@ -1517,5 +1522,12 @@
             "to": 41,
             "weight": 0.4375
         }
-    ]
+    ],
+    "weights": {
+        "Very Low": "The technology is currently not used in the system.",
+        "Low": "Design and planning phase for the implementation of the technology, but it has not yet been implemented.",
+        "Medium": "Initial phase of technology implementation (e.g., pilot project) and first test conducted.",
+        "High": "The technology has been implemented and integrated into the system, but is still in development and used only by a limited number of users.",
+        "Very High": "The technology has been fully implemented and integrated into the system (in at least one process), and activities of monitoring and continuous improvement are underway."
+    }
 }

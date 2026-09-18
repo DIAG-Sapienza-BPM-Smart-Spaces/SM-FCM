@@ -1,19 +1,18 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import * as d3 from 'd3';
-import { prepareGraphData, initialNodes as initialNodesData} from '../utils/graphUtils';
+import { prepareGraphData} from '../utils/graphUtils';
 import ElementsList from './ElementsList';
 
 const GraphVisualization = ({ graphData }) => {
-  const [shouldAnimate, setShouldAnimate] = useState(true);
-  const [selectedNode, setSelectedNode] = useState(null);
-  const [selectedZone, setSelectedZone] = useState(null);
-  const [initialNodes, setInitialNodes] = useState(initialNodesData);
-  const [generatedGraphData, setGeneratedGraphData] = useState(null);
-  const [filteredGraphData, setFilteredGraphData] = useState({
+  const [shouldAnimate, setShouldAnimate] = useState(true); 
+  const [selectedNode, setSelectedNode] = useState(null); 
+  const [selectedZone, setSelectedZone] = useState(null); 
+  const [generatedGraphData, setGeneratedGraphData] = useState(null); 
+  const [filteredGraphData, setFilteredGraphData] = useState({ // Stato per i dati del grafo filtrato
     nodes: graphData.nodes || [],
     transitions: graphData.transitions || [],
   });
-  const [enabledSections, setEnabledSections] = useState(
+  const [enabledSections, setEnabledSections] = useState(   // Stato per le sezioni abilitate
     graphData.nodes.reduce((acc, node) => {
       if (node.role === 'root' || node.role === 'intermediate') {
         acc[node.id] = true; 
@@ -21,22 +20,57 @@ const GraphVisualization = ({ graphData }) => {
       return acc;
     }, {})
   );
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);  
   const [showGeneratedGraph, setShowGeneratedGraph] = useState(false);
   const [selectedGlobalWeight, setSelectedGlobalWeight] = useState('NA');
   const [generatedGraphMode, setGeneratedGraphMode] = useState(null); 
   const [colorVersion, setColorVersion] = useState(0);
   const generatedGraphRef = useRef(null);
+  const [weightsDescription, setWeightsDescription] = useState({});
+  const [showInfoSidebar, setShowInfoSidebar] = useState(false);
   
-  const nodeConnections = useMemo(() => ({
-    1: [6, 7, 8, 9, 10, 11, 12], 
-    2: [13, 14, 15, 16, 17, 18],
-    3: [19, 20, 21, 22, 23, 24, 25, 26],
-    4: [27, 28, 29, 30, 31, 32, 33, 34],
-    5: [35, 36, 37, 38, 39, 40, 41, 42],
-  }), []);
+  const [initialNodes, setInitialNodes] = useState(() =>  // Inizializza i nodi iniziali con i dati del grafo
+  graphData.nodes.map(node => ({
+    id: node.id,
+    role: node.role,
+    label: node.label || (node.meanings ? node.meanings.join(', ') : ''),
+    weight: node.weight || 'NA',
+    enabled: node.role === 'intermediate' ? true : undefined,
+    meanings: node.meanings || [],
+  }))
+);
 
-  const getNodeAttributes = (weight) => {
+useEffect(() => { // Aggiorna la descrizione dei pesi quando i dati del grafo cambiano
+  if (graphData.weights) setWeightsDescription(graphData.weights);
+}, [graphData]);
+
+useEffect(() => { // Inizializza i nodi iniziali quando il grafo cambia
+  setInitialNodes(
+    graphData.nodes.map(node => ({
+      id: node.id,
+      role: node.role,
+      label: node.label || (node.meanings ? node.meanings.join(', ') : ''),
+      weight: node.weight || 'NA',
+      enabled: node.role === 'intermediate' ? true : undefined,
+      meanings: node.meanings || [],
+    }))
+  );
+}, [graphData]);
+
+const nodeConnections = useMemo(() => { // Crea un oggetto che mappa gli ID dei nodi intermedi ai nodi connessi
+  const connections = {};
+  graphData.nodes.forEach(node => {
+    if (node.role === 'intermediate') {
+      const connected = graphData.nodes
+        .filter(n => n.targets && n.targets.includes(node.id))
+        .map(n => n.id);
+      connections[node.id] = connected;
+    }
+  });
+  return connections;
+}, [graphData]);
+
+  const getNodeAttributes = (weight) => { // Funzione per ottenere gli attributi dei nodi in base al peso
     switch (weight) {
       case 'VL':
         return { radius: 7.5, color: '#a3c1ad' }; // Verde chiaro
@@ -53,31 +87,24 @@ const GraphVisualization = ({ graphData }) => {
     }
   };
 
-  const getNodeAttributesPy = (weight, version = 0) => {
-    const colorSets = [
-      // Versione 0: rosso
-      { VL: '#f5b7b1', L: '#f1948a', M: '#ec7063', H: '#e74c3c', VH: '#c0392b', DEF: '#000' },
-      // Versione 1: blu
-      { VL: '#aed6f1', L: '#5dade2', M: '#2874a6', H: '#154360', VH: '#1b2631', DEF: '#000' },
-      // Versione 2: verde
-      { VL: '#a3e4d7', L: '#48c9b0', M: '#117864', H: '#145a32', VH: '#0b5345', DEF: '#000' },
-      // Versione 3: viola
-      { VL: '#d2b4de', L: '#af7ac5', M: '#7d3c98', H: '#512e5f', VH: '#4a235a', DEF: '#000' },
-      // Versione 4: arancione
-      { VL: '#fad7a0', L: '#f8c471', M: '#f39c12', H: '#b9770e', VH: '#7e5109', DEF: '#000' },
-    ];
-    const set = colorSets[version] || colorSets[0];
+  const getRedNodeAttributes = (weight) => { // Funzione per ottenere gli attributi dei nodi rossi
     switch (weight) {
-      case 'VL': return { radius: 7.5, color: set.VL };
-      case 'L':  return { radius: 10, color: set.L };
-      case 'M':  return { radius: 12.5, color: set.M };
-      case 'H':  return { radius: 15, color: set.H };
-      case 'VH': return { radius: 17.5, color: set.VH };
-      default:   return { radius: 5, color: set.DEF };
+      case 'VL':
+        return { radius: 7.5, color: '#ffb3b3' }; // Rosso molto chiaro
+      case 'L':
+        return { radius: 10, color: '#ff6666' }; // Rosso chiaro
+      case 'M':
+        return { radius: 12.5, color: '#ff3333' }; // Rosso medio
+      case 'H':
+        return { radius: 15, color: '#e74c3c' }; // Rosso standard
+      case 'VH':
+        return { radius: 17.5, color: '#b71c1c' }; // Rosso intenso
+      default:
+        return { radius: 5, color: '#e74c3c' }; // Default rosso
     }
   };
 
-  const weightLabels = useMemo(() => ({
+  const weightLabels = useMemo(() => ({ // Mappa dei pesi per visualizzazione
     VL: 'Very Low',
     L: 'Low',
     M: 'Medium',
@@ -555,16 +582,21 @@ const GraphVisualization = ({ graphData }) => {
       setIsLoading(false);
     }
   };
+
+  const initialNodeMap = useMemo( // Crea una mappa dei nodi iniziali per un accesso rapido
+    () => Object.fromEntries(initialNodes.map(n => [n.id, n.weight])),
+    [initialNodes]
+  );
   
-  const renderGeneratedGraph = useCallback((graphData) => {   // Funzione per disegnare il nuovo grafo
+  const renderGeneratedGraph = useCallback((graphData) => { // Renderizza il grafo generato
     if (!graphData || !Array.isArray(graphData.nodes) || !Array.isArray(graphData.transitions)) {
       console.error('Invalid graph data:', graphData);
       alert('The graph data is invalid. Please check the backend.');
       return;
     }
-  
+
     const { nodeData, edgeData } = prepareGraphData(graphData.nodes, graphData.transitions);
-    
+
     nodeData.forEach(node => {
       node.x = undefined;
       node.y = undefined;
@@ -576,15 +608,15 @@ const GraphVisualization = ({ graphData }) => {
 
     const container = d3.select('#generated-graph');
     container.selectAll('*').remove();
-    
+
     if (container.empty()) {
       console.error('Generated graph container not found');
       return;
     }
-  
+
     const width = container.node().clientWidth;
     const height = 500;
-  
+
     const svg = container
       .append('svg')
       .attr('width', '100%')
@@ -594,17 +626,17 @@ const GraphVisualization = ({ graphData }) => {
       .style('background-color', '#f9f9f9')
       .style('border', '1px solid #ccc')
       .style('border-radius', '8px');
-  
+
     const graphGroup = svg.append('g');
-  
+
     const zoom = d3.zoom()
       .scaleExtent([0.5, 2])
       .on('zoom', (event) => {
         graphGroup.attr('transform', event.transform);
       });
-  
+
     svg.call(zoom);
-  
+
     // Tooltip per mostrare informazioni dettagliate
     const tooltip = d3.select('body')
       .append('div')
@@ -617,7 +649,7 @@ const GraphVisualization = ({ graphData }) => {
       .style('box-shadow', '0px 4px 6px rgba(0, 0, 0, 0.1)')
       .style('pointer-events', 'none')
       .style('display', 'none');
-  
+
     const simulation = d3.forceSimulation(nodeData)
       .force("link", d3.forceLink(edgeData).id(d => d.id).distance(250))
       .force("charge", d3.forceManyBody().strength(-1200))
@@ -635,7 +667,7 @@ const GraphVisualization = ({ graphData }) => {
 
     simulation.on('end', () => {
       graphData.nodes.forEach(d => {
-        d.fx = d.x; 
+        d.fx = d.x;
         d.fy = d.y;
       });
       simulation.stop();
@@ -649,7 +681,7 @@ const GraphVisualization = ({ graphData }) => {
       .append('line')
       .attr('stroke-width', d => d.weight * 2 || 1)
       .attr('stroke', '#aaa');
-      
+
     const labels = graphGroup.append('g')
       .attr('class', 'labels')
       .selectAll('text')
@@ -662,27 +694,99 @@ const GraphVisualization = ({ graphData }) => {
       .attr('dy', -15)
       .text(d => d.label || d.meanings.join(', '));
 
-    const node = graphGroup.append('g')
+    const nodeGroup = graphGroup.append('g')
       .attr('class', 'nodes')
-      .selectAll('circle')
+      .selectAll('g')
       .data(nodeData)
       .enter()
-      .append('circle')
-      .attr('r', d => getNodeAttributesPy(d.weight, colorVersion).radius)
-      .attr('fill', d => getNodeAttributesPy(d.weight, colorVersion).color)
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 2)
+      .append('g');
+
+    const weightOrder = { VL: 0, L: 1, M: 2, H: 3, VH: 4 };
+
+    function compareWeights(initial, current) {
+      if (!(initial in weightOrder) || !(current in weightOrder)) return 0;
+      if (weightOrder[current] > weightOrder[initial]) return 1; // aumentato
+      if (weightOrder[current] < weightOrder[initial]) return -1; // diminuito
+      return 0; // uguale
+    }
+
+    // 1. Cerchio base per tutti i nodi (sempre visibile)
+        
+    nodeGroup.each(function(d) {
+      const initial = initialNodeMap[d.id];
+      const current = d.weight;
+      const isRootOrIntermediate = d.role === 'root' || d.role === 'intermediate';
+      const cmp = initial ? compareWeights(initial, current) : 0;
+
+      // Peso aumentato: rosso dietro, verde sopra
+      if (cmp === 1) {
+        // Cerchio rosso dietro (peso attuale)
+        d3.select(this).append('circle')
+          .attr('r', getRedNodeAttributes(current).radius)
+          .attr('fill', getRedNodeAttributes(current).color)
+          .attr('stroke', getRedNodeAttributes(current).color)
+          .attr('stroke-width', 2)
+          .attr('opacity', 1);
+
+        // Cerchio verde sopra (peso iniziale)
+        d3.select(this).append('circle')
+          .attr('r', getNodeAttributes(initial).radius)
+          .attr('fill', isRootOrIntermediate ? getRedNodeAttributes(initial).color : getNodeAttributes(initial).color)
+          .attr('stroke', isRootOrIntermediate ? getRedNodeAttributes(initial).color : getNodeAttributes(initial).color)
+          .attr('stroke-width', 2)
+          .attr('opacity', 1);
+      }
+      // Peso diminuito: verde dietro, rosso sopra
+      else if (cmp === -1) {
+        // Cerchio verde dietro (peso iniziale)
+        d3.select(this).append('circle')
+          .attr('r', getNodeAttributes(initial).radius)
+          .attr('fill', isRootOrIntermediate ? getRedNodeAttributes(initial).color : getNodeAttributes(initial).color)
+          .attr('stroke', isRootOrIntermediate ? getRedNodeAttributes(initial).color : getNodeAttributes(initial).color)
+          .attr('stroke-width', 2)
+          .attr('opacity', 1);
+
+        // Cerchio rosso sopra (peso attuale)
+        d3.select(this).append('circle')
+          .attr('r', getNodeAttributes(current).radius)
+          .attr('fill', getRedNodeAttributes(current).color)
+          .attr('stroke', getRedNodeAttributes(current).color)
+          .attr('stroke-width', 2)
+          .attr('opacity', 1);
+      }
+      // Peso invariato: solo verde
+      else {
+        d3.select(this).append('circle')
+          .attr('r', getNodeAttributes(current).radius)
+          .attr('fill', isRootOrIntermediate ? getRedNodeAttributes(current).color : getNodeAttributes(current).color)
+          .attr('stroke', isRootOrIntermediate ? getRedNodeAttributes(current).color : '#27ae60')
+          .attr('stroke-width', 2)
+          .attr('opacity', 1);
+      }
+    });
+
+    nodeGroup.selectAll('circle')
       .style('cursor', 'pointer')
       .on('mouseover', (event, d) => {
-        const label = weightLabels[d.weight] || d.weight || 'N/A';
-        const acronym = d.weight || 'N/A';
+        const initialWeight = initialNodeMap[d.id];
+        const currentWeight = d.weight;
+        const initialLabel = weightLabels[initialWeight] || initialWeight;
+        const currentLabel = weightLabels[currentWeight] || currentWeight || 'N/A';
+        let html = '';
+        if (
+          generatedGraphMode === 'inference' &&
+          d.role === 'final' &&
+          initialWeight 
+        ) {
+          html += `<strong>Initial Weight:</strong> ${initialLabel}<br>`;
+          html += `<strong>Current Weight:</strong> ${currentLabel}<br>`;
+        } else {
+          html += `<strong>Current Weight:</strong> ${currentLabel}<br>`;
+        }
+        html += `<strong>Current Numeric Weight:</strong> ${d.numeric_weight || 'N/A'}`;
         tooltip
           .style('display', 'block')
-          .html(`
-            <strong>ID:</strong> ${d.id}<br>
-            <strong>Weight:</strong> ${label} (${acronym})<br>
-            <strong>Numeric Weight:</strong> ${d.numeric_weight || 'N/A'}
-          `);
+          .html(html);
       })
       .on('mousemove', (event) => {
         tooltip
@@ -707,25 +811,31 @@ const GraphVisualization = ({ graphData }) => {
           d.fx = d.x;
           d.fy = d.y;
         }));
-  
+
+    // Nel tick aggiorna tutti i cerchi
+    nodeGroup.selectAll('circle')
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y);
+
     simulation.on('tick', () => {
       link
         .attr('x1', d => d.source.x)
         .attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x)
         .attr('y2', d => d.target.y);
-  
-      node
+
+      nodeGroup.selectAll('circle')
         .attr('cx', d => d.x)
         .attr('cy', d => d.y);
-  
+
       labels
         .attr('x', d => d.x)
         .attr('y', d => d.y - 10);
     });
-  }, [colorVersion, weightLabels]);
 
-  const handleExecutePythonSimulation = async () => {
+  }, [weightLabels, initialNodeMap, generatedGraphMode]);
+
+  const handleExecutePythonSimulation = async () => { // Esegue il codice Python per la simulazione
     if (!filteredGraphData || !filteredGraphData.nodes) {
       alert('Graph data is not properly loaded. Please try again.');
       return;
@@ -851,11 +961,72 @@ const GraphVisualization = ({ graphData }) => {
 
   return (
     <div className="box-container">
+      <div>
+        {/* Pulsante info fisso */}
+        <button
+          onClick={() => setShowInfoSidebar(true)}
+          className="fixed top-4 left-4 z-50 bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:bg-blue-700 transition"
+          title="Show info"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+        >
+          <span style={{ fontSize: 22, fontWeight: 'bold' }}>i</span>
+        </button>
+
+        {/* Sidebar info */}
+        {showInfoSidebar && (
+        <>
+          {/* Overlay trasparente che chiude la sidebar se cliccato */}
+          <div
+            className="fixed inset-0 z-40 bg-black bg-opacity-10"
+            onClick={() => setShowInfoSidebar(false)}
+          />
+          {/* Sidebar info */}
+          <div
+            className="fixed top-0 left-0 h-full w-80 max-w-full bg-white shadow-2xl z-50 flex flex-col p-6 border-r border-gray-200 animate-slide-in overflow-y-auto max-h-screen"
+            onClick={e => e.stopPropagation()} // Previene la chiusura se clicchi dentro la sidebar
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-blue-700">How to use the FCM-based Maturity Model</h2>
+              <button
+                onClick={() => setShowInfoSidebar(false)}
+                className="text-gray-500 hover:text-blue-700 text-2xl font-bold"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="text-gray-700 text-base leading-relaxed">
+              {/* Sostituisci questo testo con quello definitivo */}
+              <p>
+                This tool allows you to explore and simulate the maturity level of Smart Manufacturing technologies using a Fuzzy Cognitive Map (FCM) model.<br /><br />
+                <strong>How it works:</strong><br />
+                - Select sections to enable or disable parts of the model.<br />
+                - Assign weights to nodes to represent the current state.<br />
+                - Run inference or simulation to see the impact on the system.<br /><br />
+                For more details, refer to the documentation or contact support.
+              </p>
+              <div className="mt-6 max-w-2xl mx-auto bg-blue-50 rounded-lg p-4 shadow">
+                <h3 className="font-bold mb-2 text-blue-700 flex items-center gap-2">
+                  <span role="img" aria-label="info">ℹ️</span> Weight Levels Meaning
+                </h3>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  {Object.entries(weightsDescription).map(([key, desc]) => (
+                    <li key={key}>
+                      <span className="font-semibold">{key}:</span> {desc}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </>
+        )}
+      </div>
       <div id="graph" style={{ width: '100%', height: '400px', border: '1px solid #ccc' }}></div>
 
       {/* Zona pulsanti */}
       <div className="mt-4 bg-white p-4 rounded shadow-md">
-        <h3 className="text-lg font-bold mb-2">Select Area</h3>
+        <h3 className="text-lg font-bold mb-2">Select Section</h3>
         <div className=" zone-buttons flex flex-wrap gap-20">
           {zones.map(zone => (
             <button
@@ -1037,6 +1208,50 @@ const GraphVisualization = ({ graphData }) => {
           </div>
           )}
           <div id="generated-graph" className="w-full h-auto"></div>
+          {/* Legenda dettagliata per i pesi */}
+          <div className="flex flex-col items-center mt-4">
+            <span className="font-semibold mb-2">Legend: Weight Levels</span>
+            <div className="overflow-x-auto w-full max-w-2xl">
+              <table className="border-collapse rounded-xl shadow bg-white w-full">
+                <thead>
+                  <tr className="bg-blue-50">
+                    <th className="px-4 py-2 border text-center rounded-tl-xl">Weight</th>
+                    <th className="px-4 py-2 border text-center">Initial State</th>
+                    <th className="px-4 py-2 border text-center">Current State</th>
+                    <th className="px-4 py-2 border text-center rounded-tr-xl">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['VL', 'L', 'M', 'H', 'VH'].map((w, i) => (
+                    <tr key={w} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-4 py-2 border text-center font-semibold">{weightLabels[w]}</td>
+                      <td className="px-4 py-2 border text-center">
+                        <span
+                          className="inline-block w-6 h-6 rounded-full border shadow"
+                          style={{
+                            background: getNodeAttributes(w).color,
+                            borderColor: getNodeAttributes(w).color,
+                          }}
+                          title={`Green: ${weightLabels[w]}`}
+                        ></span>
+                      </td>
+                      <td className="px-4 py-2 border text-center">
+                        <span
+                          className="inline-block w-6 h-6 rounded-full border shadow"
+                          style={{
+                            background: getRedNodeAttributes(w).color,
+                            borderColor: getRedNodeAttributes(w).color,
+                          }}
+                          title={`Red: ${weightLabels[w]}`}
+                        ></span>
+                      </td>
+                      <td className="px-4 py-2 border text-left text-xs">{weightsDescription[weightLabels[w]] || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

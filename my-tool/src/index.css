@@ -319,6 +319,14 @@ h3 {
   height: 500px;
 }
 
+@keyframes slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.2s ease;
+}
+
 @media (max-width: 768px) {
   .zone-buttons button {
     flex: 1 1 calc(50% - 10px); 

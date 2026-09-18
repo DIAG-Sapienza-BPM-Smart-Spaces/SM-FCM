@@ -131,7 +131,18 @@ points for the research workflows below.
     python -m pip install -r requirements.txt
     ```
 
-## Run the research code
+## Run the tool
+```
+cd my-tool
+npm install # install dependencies
+npm start
+```
+```
+cd my-tool/backend
+python server.py
+```
+
+## Run the code
 
 - Activate the conda environment:
     ```shell

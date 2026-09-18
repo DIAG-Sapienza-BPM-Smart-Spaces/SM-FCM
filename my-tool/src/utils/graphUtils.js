@@ -1,5 +1,5 @@
 // Dati di esempio per inizializzare il grafo
-export let initialNodes = [
+/*export let initialNodes = [
   { id: 0, role: 'root', label: 'Smart Manufactoring', weight: 'NA' },
   { id: 1, role: 'intermediate', label: 'CAD, CAM, PLM', weight: 'NA', enabled: true },
   { id: 2, role: 'intermediate', label: 'CRM', weight: 'NA', enabled: true },
@@ -43,7 +43,7 @@ export let initialNodes = [
   { id: 40, role: 'leaf', label: 'AR, VR', weight: 'NA' },
   { id: 41, role: 'leaf', label: 'Digital Twin', weight: 'NA' },
   { id: 42, role: 'leaf', label: 'DM, BI', weight: 'NA' },
-];
+];*/
 
 export const prepareGraphData = (nodes, transitions, weights = []) => {
   const nodeData = nodes.map(n => {
